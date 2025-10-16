@@ -2,11 +2,16 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 
 interface EmotionData {
-  frustracion: number
-  tristeza: number
   enojo: number
-  desmotivacion: number
-  atencion_baja: number
+  tristeza: number
+  asco: number
+  miedo: number
+  felicidad: number
+  sorpresa: number
+  neutral: number
+  total_detections?: number
+  last_update?: string
+  active_session?: string
 }
 
 interface Session {
@@ -19,11 +24,16 @@ interface Session {
 
 const Dashboard: React.FC = () => {
   const [emotionData, setEmotionData] = useState<EmotionData>({
-    frustracion: 0,
-    tristeza: 0,
     enojo: 0,
-    desmotivacion: 0,
-    atencion_baja: 0
+    tristeza: 0,
+    asco: 0,
+    miedo: 0,
+    felicidad: 0,
+    sorpresa: 0,
+    neutral: 0,
+    total_detections: 0,
+    last_update: '',
+    active_session: ''
   })
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
   const [cameraActive, setCameraActive] = useState(false)
@@ -35,38 +45,65 @@ const Dashboard: React.FC = () => {
     checkCameraStatus()
     
     // Verificar estado de cámara cada 2 segundos
-    const interval = setInterval(checkCameraStatus, 2000)
+    const cameraInterval = setInterval(checkCameraStatus, 2000)
     
-    return () => clearInterval(interval)
+    // Actualizar datos emocionales cada 10 segundos (modo prueba)
+    const dataInterval = setInterval(loadDashboardData, 10000)
+    
+    return () => {
+      clearInterval(cameraInterval)
+      clearInterval(dataInterval)
+    }
   }, [])
 
   const loadDashboardData = async () => {
     try {
       setLoading(true)
-      // Obtener datos reales de la API
+      // Obtener datos reales de la API con el nuevo sistema de agregación
       const response = await fetch('http://127.0.0.1:8000/api/emotion/current-stats')
-      if (response.ok) {
-        const data = await response.json()
-        setEmotionData(data)
-      } else {
+        if (response.ok) {
+          const data = await response.json()
+          setEmotionData({
+            enojo: data.enojo || 0,
+            tristeza: data.tristeza || 0,
+            asco: data.asco || 0,
+            miedo: data.miedo || 0,
+            felicidad: data.felicidad || 0,
+            sorpresa: data.sorpresa || 0,
+            neutral: data.neutral || 0,
+            total_detections: data.total_detections || 0,
+            last_update: data.last_update || '',
+            active_session: data.active_session || ''
+          })
+        } else {
         // Si no hay datos, inicializar en 0
         setEmotionData({
-          frustracion: 0,
-          tristeza: 0,
           enojo: 0,
-          desmotivacion: 0,
-          atencion_baja: 0
+          tristeza: 0,
+          asco: 0,
+          miedo: 0,
+          felicidad: 0,
+          sorpresa: 0,
+          neutral: 0,
+          total_detections: 0,
+          last_update: '',
+          active_session: ''
         })
       }
     } catch (err) {
       setError('Error cargando datos del dashboard')
       // Inicializar en 0 si hay error
       setEmotionData({
-        frustracion: 0,
-        tristeza: 0,
         enojo: 0,
-        desmotivacion: 0,
-        atencion_baja: 0
+        tristeza: 0,
+        asco: 0,
+        miedo: 0,
+        felicidad: 0,
+        sorpresa: 0,
+        neutral: 0,
+        total_detections: 0,
+        last_update: '',
+        active_session: ''
       })
     } finally {
       setLoading(false)
@@ -182,7 +219,7 @@ const Dashboard: React.FC = () => {
     }
   }
 
-  const totalEmotions = Object.values(emotionData).reduce((sum, value) => sum + value, 0)
+  // Removed totalEmotions calculation as we now use percentage-based system
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -330,19 +367,30 @@ const Dashboard: React.FC = () => {
           <div className="lg:col-span-2 space-y-8">
             {/* Gráfico de emociones */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                Distribución Emocional Actual
-              </h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Distribución Emocional (Modo Prueba - 30 seg)
+                </h3>
+                <div className="text-sm text-gray-500">
+                  {emotionData.last_update && (
+                    <span>Última actualización: {new Date(emotionData.last_update).toLocaleTimeString()}</span>
+                  )}
+                </div>
+              </div>
               
-              <div className="space-y-4">
-                {Object.entries(emotionData).map(([emotion, value]) => {
-                  const percentage = totalEmotions > 0 ? (value / totalEmotions) * 100 : 0
+            <div className="space-y-4">
+              {Object.entries(emotionData).filter(([key]) =>
+                ['enojo', 'tristeza', 'asco', 'miedo', 'felicidad', 'sorpresa', 'neutral'].includes(key)
+              ).map(([emotion, value]) => {
+                  const percentage = typeof value === 'number' ? value : 0
                   const colors = {
-                    frustracion: 'bg-orange-500',
-                    tristeza: 'bg-blue-400',
                     enojo: 'bg-red-500',
-                    desmotivacion: 'bg-yellow-500',
-                    atencion_baja: 'bg-purple-400'
+                    tristeza: 'bg-blue-400',
+                    asco: 'bg-green-500',
+                    miedo: 'bg-purple-500',
+                    felicidad: 'bg-yellow-400',
+                    sorpresa: 'bg-orange-500',
+                    neutral: 'bg-gray-500'
                   }
                   
                   return (
@@ -353,22 +401,25 @@ const Dashboard: React.FC = () => {
                       <div className="flex-1 bg-gray-200 rounded-full h-4">
                         <div
                           className={`h-4 rounded-full ${colors[emotion as keyof typeof colors]}`}
-                          style={{ width: `${percentage}%` }}
+                          style={{ width: `${Math.min(percentage, 100)}%` }}
                         ></div>
                       </div>
                       <div className="w-16 text-sm text-gray-600 text-right">
-                        {value} ({percentage.toFixed(1)}%)
+                        {percentage.toFixed(1)}%
                       </div>
                     </div>
                   )
                 })}
               </div>
               
-              {totalEmotions > 0 && (
-                <div className="mt-4 text-center text-sm text-gray-600">
-                  Total: {totalEmotions} detecciones
+              <div className="mt-4 flex justify-between items-center text-sm text-gray-600">
+                <div>
+                  <span className="font-medium">Detecciones en ventana:</span> {emotionData.total_detections || 0}
                 </div>
-              )}
+                <div className="text-xs text-gray-500">
+                  Modo prueba: agregación cada 30 segundos
+                </div>
+              </div>
             </div>
 
             {/* Métricas generales */}
@@ -382,29 +433,66 @@ const Dashboard: React.FC = () => {
               
               <div className="bg-white rounded-lg shadow-md p-4 text-center">
                 <div className="text-3xl font-bold text-green-600">
-                  {totalEmotions}
+                  {emotionData.total_detections || 0}
                 </div>
-                <div className="text-sm text-gray-600">Detecciones</div>
+                <div className="text-sm text-gray-600">Detecciones (30s)</div>
               </div>
               
               <div className="bg-white rounded-lg shadow-md p-4 text-center">
                 <div className="text-3xl font-bold text-purple-600">
-                  {cameraActive ? '85%' : '0%'}
+                  {cameraActive ? 'ON' : 'OFF'}
                 </div>
-                <div className="text-sm text-gray-600">Atención Promedio</div>
+                <div className="text-sm text-gray-600">Estado Cámara</div>
               </div>
               
               <div className="bg-white rounded-lg shadow-md p-4 text-center">
-                <div className="text-3xl font-bold text-red-600">
-                  {totalEmotions > 50 ? 1 : 0}
+                <div className="text-3xl font-bold text-orange-600">
+                  {emotionData.enojo > 30 || emotionData.tristeza > 20 ? 1 : 0}
                 </div>
-                <div className="text-sm text-gray-600">Alertas Críticas</div>
+                <div className="text-sm text-gray-600">Alertas</div>
               </div>
             </div>
           </div>
 
-          {/* Columna lateral - Enlaces rápidos */}
+          {/* Columna lateral - Información del sistema */}
           <div className="space-y-6">
+            {/* Información del sistema de agregación */}
+            <div className="bg-blue-50 rounded-lg shadow-md p-6">
+              <h3 className="text-lg font-semibold text-blue-800 mb-4">
+                📊 Sistema de Análisis
+              </h3>
+              
+              <div className="space-y-3 text-sm text-blue-700">
+                <div className="flex items-start space-x-2">
+                  <span className="font-medium">⏱️ Frecuencia:</span>
+                  <span>Modo prueba: cada 30 segundos</span>
+                </div>
+                
+                <div className="flex items-start space-x-2">
+                  <span className="font-medium">📈 Métricas:</span>
+                  <span>Promedios de emociones por ventana</span>
+                </div>
+                
+                <div className="flex items-start space-x-2">
+                  <span className="font-medium">🎯 Precisión:</span>
+                  <span>Optimizado para análisis educativo</span>
+                </div>
+                
+                <div className="flex items-start space-x-2">
+                  <span className="font-medium">💾 Eficiencia:</span>
+                  <span>Menos datos, mejor rendimiento</span>
+                </div>
+              </div>
+              
+              {emotionData.active_session && (
+                <div className="mt-4 p-3 bg-blue-100 rounded-lg">
+                  <div className="text-xs text-blue-600">
+                    <strong>Sesión activa:</strong> {emotionData.active_session}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="bg-white rounded-lg shadow-md p-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">
                 Enlaces Rápidos
